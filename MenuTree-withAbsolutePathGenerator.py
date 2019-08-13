@@ -1,3 +1,4 @@
+import subprocess
 import os
 import sys
 import codecs
@@ -5,35 +6,33 @@ import chardet
 
 
 class pathGenerator:
-    def __init__(self, path):
+    def __init__(self, directory=""):
         self.path = ""
-        self.fileName,self.fileExt = os.path.splitext(path)
-        # self.fileExt = os.path.splitext(path)[1]
+        self.fileName = "MenuTree.txt"
+        if(directory[-1] == "\\"):
+            self.directory = directory[:-1]
+        else:
+            self.directory = directory
+        self.menuTreePath = self.directory+'/'+self.fileName
         self.depthPos = []
         self.absoluteFile = None  # initialize as None
         self.originFile = None
 
     def convert_file_to_utf8(self):
-        # !!! does not backup the origin file
-        content = codecs.open(self.fileName+self.fileExt, 'rb').read()
+        content = codecs.open(self.menuTreePath, 'rb').read()
         source_encoding = chardet.detect(content)['encoding']
         if source_encoding == None:
-            print("Detect Failed", self.fileName)
+            print("Failed:Can't detect encoding")
             return False
         else:
-            print("  ", source_encoding, self.fileName)
+            print("Encoding:",source_encoding, self.menuTreePath)
             if source_encoding != 'utf-8':
                 # .encode(source_encoding)
                 content = content.decode(source_encoding, 'ignore')
-                codecs.open(self.fileName+self.fileExt, 'w',
+                codecs.open(self.menuTreePath, 'w',
                             encoding='utf-8').write(content)
+                print("Converte encoding to UTF-8 succeeded")
             return True
-
-    def openFile(self):
-        self.absoluteFile = open(
-            self.fileName+"-absolutePath.txt", mode='w', encoding="utf-8")
-        self.originFile = open(self.fileName+self.fileExt,
-                               mode='r', encoding="utf-8")
 
     # following functions may fail if there are special characters  in the file name
 
@@ -55,29 +54,21 @@ class pathGenerator:
         self.absoluteFile.write("  [")
         self.absoluteFile.write(self.path)
         self.absoluteFile.write("]\n")
-        # print(line[0:-1], end='')
-        # print("  [", end='')
-        # print(self.path, end='')
-        # print("]\n", end='')
 
-    def run(self):
-        if self.convert_file_to_utf8() == False:
-            return False
-        self.openFile()
+    def writePaths(self):
         lines = self.originFile.readlines()
-        count = 1
+        lines.pop(0)
+        lines.pop(0)
         purStr = 0
         curDepth = 0
         for line in lines:
-            count += 1
             purStr = self.getPureStr(line)
             curDepth = self.getFolderDepth(line)
-            if curDepth == -1:  # 非文件夹
+            if curDepth == -1:  # not a directory
                 if(self.getPureStr(line) == ""):
                     self.absoluteFile.write(line)
                 else:
                     self.wrtieAbsoluteRoute(line)
-                    # print(line, end='')
             else:  # 文件夹
                 while(len(self.depthPos) >= 1 and curDepth <= self.depthPos[-1]):
                     # 同级文件夹或上级文件夹
@@ -86,9 +77,26 @@ class pathGenerator:
                 self.depthPos.append(curDepth)
                 self.path += ('/'+purStr)
                 self.wrtieAbsoluteRoute(line)
+
+    def run(self):
+        # import os
+        if os.path.exists(self.directory) == False:
+            print("Fail:Path don't exist")
+            return -1
+        print("Path exist:"+self.directory)
+        cmd = ['tree', self.directory, "/f>", self.menuTreePath]
+        subprocess.run(cmd, shell=True)
+        if self.convert_file_to_utf8() == False:
+            return -2
+        self.absoluteFile = open(
+            self.directory+"/AbsolutePath-"+self.fileName, mode='w', encoding="utf-8")
+        self.originFile = open(self.menuTreePath, mode='r', encoding="utf-8")
+        print("Generating the menu tree with absolute paths...")
+        self.writePaths()
+        print("Done")
         self.absoluteFile.close()
         self.originFile.close()
-        return True
+        return 1
 
 
 if __name__ == "__main__":
